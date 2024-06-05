@@ -7,36 +7,21 @@ public class SensorGripConnector : MonoBehaviour
 {
     public Text deviceScanButtonText;
     public Text deviceScanStatusText;
-    public Text serviceScanStatusText;
-    public Text characteristicScanStatusText;
-
+    
     public bool isScanningDevices;
-    public bool isScanningServices;
-    public bool isScanningCharacteristics;
     public bool isSubscribed;
-
-    public Button serviceScanButton;
-    public Button characteristicScanButton;
-
+    
     public GameObject deviceScanResultProto;
 
     public string selectedDeviceId;
-    public string selectedServiceId;
-    public string selectedCharacteristicId;
-    public Button subscribeButton;
 
     public Text subcribeText;
-
-
-    public Dropdown serviceDropdown;
-    public Dropdown characteristicDropdown;
-    private readonly Dictionary<string, string> characteristicNames = new();
+    
 
     private readonly Dictionary<string, Dictionary<string, string>> devices = new();
     private string lastError;
 
     private Transform scanResultRoot;
-
     
     public static SensorGripConnector Instance { get; private set; }
     
@@ -68,9 +53,7 @@ public class SensorGripConnector : MonoBehaviour
 
     private void Update()
     {
-        if (isScanningServices) ScanForServicesLoop();
         if (isScanningDevices) ScanningForDevicesLoop();
-        if (isScanningCharacteristics) SanForCharacteristicsLoop();
         if (isSubscribed) SubscribeToDataLoop();
     }
 
@@ -149,103 +132,10 @@ public class SensorGripConnector : MonoBehaviour
         }
 
         selectedDeviceId = data.name;
-        //StartServiceScan();
         Subscribe();
     }
-
-
-    public void StartServiceScan()
-    {
-        if (!isScanningServices)
-        {
-            // start new scan
-            serviceDropdown.ClearOptions();
-            BleApi.ScanServices(selectedDeviceId);
-            isScanningServices = true;
-        }
-    }
-
-    private void ScanForServicesLoop()
-    {
-        BleApi.ScanStatus status;
-        var res = new BleApi.Service();
-        do
-        {
-            status = BleApi.PollService(out res, false);
-            if (status == BleApi.ScanStatus.AVAILABLE)
-            {
-                if (res.uuid.Contains("1111-"))
-                {
-                    serviceDropdown.AddOptions(new List<string> { res.uuid });
-                    // first option gets selected
-                    if (serviceDropdown.options.Count == 1)
-                        SelectService(serviceDropdown.gameObject);
-                }
-            }
-            else if (status == BleApi.ScanStatus.FINISHED)
-            {
-                isScanningServices = false;
-            }
-        } while (status == BleApi.ScanStatus.AVAILABLE);
-    }
-
-
-    public void SelectService(GameObject data)
-    {
-        selectedServiceId = serviceDropdown.options[serviceDropdown.value].text;
-        characteristicScanButton.interactable = true;
-    }
-
-
-    private void SanForCharacteristicsLoop()
-    {
-        BleApi.ScanStatus status;
-        var res = new BleApi.Characteristic();
-        do
-        {
-            status = BleApi.PollCharacteristic(out res, false);
-            if (status == BleApi.ScanStatus.AVAILABLE)
-            {
-                var name = res.userDescription != "no description available" ? res.userDescription : res.uuid;
-                characteristicNames[name] = res.uuid;
-                Debug.Log(res.uuid);
-                if (res.uuid.ToLower().Contains("3004"))
-                {
-                    characteristicDropdown.AddOptions(new List<string> { name });
-                    // first option gets selected
-                    if (characteristicDropdown.options.Count == 1)
-                        SelectCharacteristic(characteristicDropdown.gameObject);
-                    //isScanningCharacteristics = false;
-                    //break;
-                }
-            }
-            else if (status == BleApi.ScanStatus.FINISHED)
-            {
-                isScanningCharacteristics = false;
-                characteristicScanButton.interactable = true;
-            }
-        } while (status == BleApi.ScanStatus.AVAILABLE);
-    }
-
-    public void StartCharacteristicScan()
-    {
-        if (!isScanningCharacteristics)
-        {
-            // start new scan
-            characteristicDropdown.ClearOptions();
-            BleApi.ScanCharacteristics(selectedDeviceId, selectedServiceId);
-            isScanningCharacteristics = true;
-            characteristicScanButton.interactable = false;
-        }
-    }
-
-    public void SelectCharacteristic(GameObject data)
-    {
-        var name = characteristicDropdown.options[characteristicDropdown.value].text;
-        selectedCharacteristicId = characteristicNames[name];
-    }
-
-
+    
+    
     public void Subscribe()
     {
         // no error code available in non-blocking mode
@@ -271,11 +161,7 @@ public class SensorGripConnector : MonoBehaviour
             
             UpdateData(sensorData);
             
-            //Debug.Log(sensorData.TipSensorValue);
-
             subcribeText.text = sensorData.ToString();
-                //subcribeText.text = Encoding.ASCII.GetString(res.buf, 0, res.size);
-            //FormatSensorGripDataToDictionary(data);
         }
     }
     
@@ -287,41 +173,7 @@ public class SensorGripConnector : MonoBehaviour
             OnDataChanged?.Invoke(currentData); // Notify subscribers
         }
     }
-
-
-    private static void FormatSensorGripDataToDictionary(byte[] data)
-    {
-        var meassurments = new Dictionary<string, string>
-        {
-            { "timestamp", BitConverter.ToUInt16(data, 0).ToString() },
-            { "tipSensorValue", BitConverter.ToInt16(data, 2).ToString() },
-            { "fingerSensorValue", BitConverter.ToInt16(data, 4).ToString() },
-            { "angle", Math.Abs(BitConverter.ToInt16(data, 6)).ToString() },
-            { "speed", BitConverter.ToInt16(data, 2) > 15 ? BitConverter.ToInt16(data, 8).ToString() : "0" },
-            { "batteryLevel", BitConverter.ToInt16(data, 10).ToString() },
-            { "secondsInRange", BitConverter.ToInt16(data, 12).ToString() },
-            { "secondsInUse", BitConverter.ToInt16(data, 14).ToString() },
-            { "tipSensorUpperRange", BitConverter.ToInt16(data, 16).ToString() },
-            { "tipSensorLowerRange", BitConverter.ToInt16(data, 18).ToString() },
-            { "fingerSensorUpperRange", BitConverter.ToInt16(data, 20).ToString() },
-            { "fingerSensorLowerRange", BitConverter.ToInt16(data, 22).ToString() },
-            { "accX", BitConverter.ToSingle(data, 24).ToString() },
-            { "accY", BitConverter.ToSingle(data, 28).ToString() },
-            { "accZ", BitConverter.ToSingle(data, 32).ToString() },
-            { "gyroX", BitConverter.ToSingle(data, 36).ToString() },
-            { "gyroY", BitConverter.ToSingle(data, 40).ToString() },
-            { "gyroZ", BitConverter.ToSingle(data, 44).ToString() }
-        };
-
-        var s = "\n";
-
-        foreach (var kvp in meassurments) s = s + "Key = " + kvp.Key + "Value = " + kvp.Value + "\n";
-        //textBox3.Text += ("Key = {0}, Value = {1}", kvp.Key, kvp.Value);
-        //Debug.Log(s);                 
-
-        Debug.Log("tipSensorValue " + BitConverter.ToInt16(data, 2));
-    }
-
+    
     public class SensorData
     {
         // Define the structure of your Bluetooth data here
@@ -396,6 +248,9 @@ public class SensorGripConnector : MonoBehaviour
 
     public void QuitBel()
     {
+        subcribeText.text = "";
+        for (var i = scanResultRoot.childCount - 1; i >= 0; i--)
+            Destroy(scanResultRoot.GetChild(i).gameObject);
         BleApi.Quit();
     }
 }
